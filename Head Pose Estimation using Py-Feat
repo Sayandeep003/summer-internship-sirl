@@ -1,0 +1,57 @@
+import os
+import pandas as pd
+import numpy as np
+
+# Define the server location of the videos
+server_location = 
+
+# Define the list of phases
+phases = ['Baseline', 'ATP1', 'TP1', 'AP1', 'RP1', 'ATP2', 'TP2', 'AP2', 'RP2', 'ATP3', 'AP3', 'RP3']
+
+# Define the columns related to head pose (yaw, pitch, roll)
+head_pose_columns = ['Pitch', 'Roll', 'Yaw']
+
+# Iterate over each participant and phase
+for participant in range(101, 103):
+    for phase in phases:
+        # Define the CSV file path for the current participant and phase
+        csv_file = os.path.join(server_location, str(participant), f"{participant}_{phase}.csv")
+
+        try:
+            # Load the CSV file
+            df = pd.read_csv(csv_file)
+
+            # Select the columns related to head pose
+            head_pose_data = df[head_pose_columns]
+
+            # Calculate the velocity, acceleration, and movement range for each head pose parameter
+            for column in head_pose_columns:
+                # Calculate velocity
+                df[column+'_velocity'] = np.gradient(head_pose_data[column])
+
+                # Calculate acceleration
+                df[column+'_acceleration'] = np.gradient(df[column+'_velocity'])
+
+                # Calculate movement range
+                df[column+'_range'] = df[column].max() - df[column].min()
+
+            # Calculate final velocity, acceleration, and movement range
+            df['final_velocity'] = np.sqrt(df['Pitch_velocity']**2 + df['Roll_velocity']**2 + df['Yaw_velocity']**2)
+            df['final_acceleration'] = np.sqrt(df['Pitch_acceleration']**2 + df['Roll_acceleration']**2 + df['Yaw_acceleration']**2)
+            df['final_range'] = df['Pitch_range'] + df['Roll_range'] + df['Yaw_range']
+
+            # Save the processed DataFrame to a new CSV file
+            new_csv_file = os.path.join(server_location, str(participant), f"{participant}_{phase}_head_pose.csv")
+            df.to_csv(new_csv_file, columns=['Pitch_velocity', 'Roll_velocity', 'Yaw_velocity', 'Pitch_acceleration', 'Roll_acceleration', 'Yaw_acceleration', 'Pitch_range', 'Roll_range', 'Yaw_range', 'final_velocity', 'final_acceleration', 'final_range'], index=False)
+
+            # Print the completion statement
+            print(f"Completed: Participant {participant}, Phase {phase}")
+
+        except FileNotFoundError:
+            # Print the error message if the CSV file is not found
+            print(f"Could not complete: Participant {participant}, Phase {phase}. CSV file not found.")
+
+        except Exception as e:
+            # Print the error message if any other exception occurs
+            print(f"Could not complete: Participant {participant}, Phase {phase}. Error: {e}")
+#Roll, pitch, and yaw are rotational forces, or moments, about the X, Y, and Z axes.Here its simply the angles made by the movement of the participant's head wrt the respective axes
