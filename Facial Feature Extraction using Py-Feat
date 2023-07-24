@@ -1,0 +1,61 @@
+import os
+import pandas as pd
+from feat import Detector
+from feat.utils.io import get_test_data_path
+from IPython.core.display import Video
+
+def extract_features(video_path):
+    # Create a detector object
+    detector = Detector()
+
+    try:
+        # Detect video features
+        video_prediction = detector.detect_video(video_path, skip_frames=13)
+
+        # Save the video predictions to a CSV file
+        csv_filename = os.path.splitext(video_path)[0] + ".csv"
+        video_prediction.to_csv(csv_filename, index=False)
+
+        # Extract emotions from the predictions and save to a separate CSV file
+        df = pd.DataFrame(video_prediction.emotions, columns=['anger', 'disgust', 'fear', 'happiness', 'sadness', 'surprise', 'neutral'])
+        emotions_csv_filename = os.path.splitext(video_path)[0] + "_emotion.csv"
+        df.to_csv(emotions_csv_filename, index=False)
+
+        # Clear variables and release memory
+        del video_prediction
+
+        # Return the mean emotions
+        return df.mean()
+
+    except Exception as e:
+        print(f"Error processing video: {e}")
+        return pd.DataFrame()
+
+def automate_feature_extraction(root_folder):
+    # Iterate through the root folder and its subdirectories
+    for dirpath, dirnames, filenames in os.walk(root_folder):
+        # Check if the current directory contains the folders 189 to 219
+        for dirname in dirnames:
+            folder_number = int(dirname)
+            if 214<= folder_number <= 219:
+                video_folder_path = os.path.join(dirpath, dirname)
+                # Check if the video folder is empty
+                if not any(filename.endswith(".mp4") for filename in os.listdir(video_folder_path)):
+                    print("Skipping empty folder:", video_folder_path)
+                    continue
+                
+                # Iterate through the video files in the current folder
+                for filename in os.listdir(video_folder_path):
+                    if filename.endswith(".mp4"):
+                        video_path = os.path.join(video_folder_path, filename)
+                        # Call the function to extract features from the video
+                        mean_emotions = extract_features(video_path)
+                        if not mean_emotions.empty:
+                            print("Mean emotions for", video_path)
+                            print(mean_emotions)
+
+# Specify the root folder where your videos are located
+root_folder = 
+
+# Call the function to automate the feature extraction process
+automate_feature_extraction(root_folder)
