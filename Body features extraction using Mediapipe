@@ -1,0 +1,132 @@
+import cv2
+import mediapipe as mp
+import pandas as pd
+import numpy as np
+import os
+
+# Constants
+FPS = 27  # Frames per second
+
+def process_video(video_path):
+    # Initialize Mediapipe Pose model
+    mp_pose = mp.solutions.pose
+    pose = mp_pose.Pose(static_image_mode=False, min_detection_confidence=0.5, min_tracking_confidence=0.5)
+
+    # Open video file
+    cap = cv2.VideoCapture(video_path)
+
+    # Initialize DataFrame for landmark data
+    columns = ['Frame', 'Landmark', 'X', 'Y', 'Z']
+    df = pd.DataFrame(columns=columns)
+
+    frame_count = 0
+
+    while True:
+        # Read frame from video
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        # Flip the frame horizontally for a mirrored view
+        frame = cv2.flip(frame, 1)
+
+        # Convert the image color from BGR to RGB
+        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+        # Process the frame with Mediapipe Pose
+        results = pose.process(rgb_frame)
+
+        # Get 3D landmark positions and update the DataFrame
+        if results.pose_landmarks:
+            landmarks = []
+            for idx, landmark in enumerate(results.pose_landmarks.landmark):
+                x = landmark.x
+                y = landmark.y
+                z = landmark.z
+                landmark_name = mp_pose.PoseLandmark(idx).name
+                landmarks.append({'Frame': frame_count, 'Landmark': landmark_name, 'X': x, 'Y': y, 'Z': z})
+
+                # Draw landmark on the frame
+                cx, cy = int(x * frame.shape[1]), int(y * frame.shape[0])
+                cv2.circle(frame, (cx, cy), 5, (0, 255, 0), -1)
+
+            new_df = pd.DataFrame(landmarks)
+            df = pd.concat([df, new_df])
+
+        # Display the DataFrame for the current frame
+        current_frame_df = df[df['Frame'] == frame_count]
+        print(current_frame_df)
+
+        # Display the resulting frame
+        cv2.imshow('Upper Body Pose Estimation', frame)
+
+        # Increment frame count
+        frame_count += 1
+
+        # Exit the loop when 'q' is pressed
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+    # Save the DataFrame as a CSV file
+    output_csv_path = os.path.splitext(video_path)[0] + '_body_pose.csv'
+    df.to_csv(output_csv_path, index=False)
+
+    # Calculate further features
+    # Read the CSV file
+    df = pd.read_csv(output_csv_path)
+
+    # Calculate time intervals
+    time_intervals = 1 / FPS
+
+    # Calculate velocity
+    df['Velocity'] = np.sqrt(df.groupby('Landmark')[['X', 'Y', 'Z']].diff().pow(2).sum(axis=1)) / time_intervals
+
+    # Calculate acceleration
+    df['Acceleration'] = df.groupby('Landmark')['Velocity'].diff() / time_intervals
+
+    # Calculate motion energy
+    df['MotionEnergy'] = np.square(df['Velocity'])
+
+    # Calculate movement range for each axis
+    df['MovementRangeX'] = df.groupby('Landmark')['X'].transform(lambda x: x.max() - x.min())
+    df['MovementRangeY'] = df.groupby('Landmark')['Y'].transform(lambda y: y.max() - y.min())
+    df['MovementRangeZ'] = df.groupby('Landmark')['Z'].transform(lambda z: z.max() - z.min())
+
+    # Calculate average movement range for each landmark
+    averages = df.groupby('Landmark')[['Velocity', 'Acceleration', 'MotionEnergy', 'MovementRangeX', 'MovementRangeY', 'MovementRangeZ']].mean().reset_index()
+
+    # Calculate overall movement range for each landmark
+    averages['MovementRange'] = np.sqrt(averages['MovementRangeX']**2 + averages['MovementRangeY']**2 + averages['MovementRangeZ']**2)
+
+    # Save the further calculations as a CSV file
+    output_calculations_csv_path = os.path.splitext(video_path)[0] + '_body_pose_calculations.csv'
+    averages.to_csv(output_calculations_csv_path, index=False)
+
+    # Release the video file and close windows
+    cap.release()
+    cv2.destroyAllWindows()
+
+
+def process_participants(participant_range, phase_list, server_location):
+    for participant in participant_range:
+        participant_folder = os.path.join(server_location, str(participant))
+        if os.path.isdir(participant_folder):
+            for phase in phase_list:
+                video_path = os.path.join(participant_folder, f"{participant}_{phase}.mp4")
+
+                if os.path.exists(video_path):
+                    print(f"Processing participant {participant}, phase {phase}...")
+                    process_video(video_path)
+                    print(f"Participant {participant}, phase {phase} completed.\n")
+                else:
+                    print(f"Video file not found for participant {participant}, phase {phase}. Skipping...\n")
+        else:
+            print(f"Participant folder not found for participant {participant}. Skipping...\n")
+
+
+if __name__ == '__main__':
+    participant_range = range(101, 102)  # Adjust the range based on your requirement
+    phase_list = ['Baseline', 'ATP1', 'TP1', 'AP1', 'RP1', 'ATP2', 'TP2', 'AP2', 'RP2', 'ATP3', 'AP3', 'RP3']
+    server_location = # Update with the server location
+
+    process_participants(participant_range, phase_list, server_location)
